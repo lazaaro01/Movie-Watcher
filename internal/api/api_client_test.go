@@ -12,19 +12,19 @@ func TestGetMovies(t *testing.T) {
 		resp := MovieListResponse{
 			Items: []MovieItem{
 				{
-					ID:          "123",
-					Title:       "Test Movie",
+					ID:            "123",
+					Title:         "Test Movie",
 					OriginalTitle: "Test Movie",
-					Duration:    "120",
+					Duration:      "120",
 					ContentRating: "12 anos",
-					Synopsis:    "A test movie",
-					IsPlaying:   true,
+					Synopsis:      "A test movie",
+					IsPlaying:     true,
 				},
 			},
 			Count: 1,
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
 
@@ -52,9 +52,9 @@ func TestGetTheaters(t *testing.T) {
 		resp := TheaterListResponse{
 			Items: []TheaterItem{
 				{
-					ID:     "1446",
-					Name:   "Cinépolis RioMar Kennedy",
-					CityID: "36",
+					ID:         "1446",
+					Name:       "Cinépolis RioMar Kennedy",
+					CityID:     "36",
 					TotalRooms: 6,
 					Enabled:    true,
 				},
@@ -62,7 +62,7 @@ func TestGetTheaters(t *testing.T) {
 			Count: 1,
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(resp)
+		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
 
@@ -89,7 +89,7 @@ func TestGetSessions(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		sessions := []TheaterSession{
 			{
-				Date:  "2026-06-08",
+				Date:    "2026-06-08",
 				IsToday: true,
 				Movies: []MovieSession{
 					{
@@ -117,7 +117,7 @@ func TestGetSessions(t *testing.T) {
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(sessions)
+		_ = json.NewEncoder(w).Encode(sessions)
 	}))
 	defer server.Close()
 
@@ -147,9 +147,9 @@ func TestGetSessions(t *testing.T) {
 func TestGetSessionDetail(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		detail := SessionDetail{
-			ID:    "456",
-			Price: 34.20,
-			Room:  "Sala 1",
+			ID:      "456",
+			Price:   34.20,
+			Room:    "Sala 1",
 			Enabled: true,
 			Date: SessionDate{
 				LocalDate: "2026-06-08T19:00:00-03:00",
@@ -157,7 +157,7 @@ func TestGetSessionDetail(t *testing.T) {
 			},
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(detail)
+		_ = json.NewEncoder(w).Encode(detail)
 	}))
 	defer server.Close()
 
@@ -183,7 +183,7 @@ func TestGetSessionDetail(t *testing.T) {
 func TestHTTPError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte(`not found`))
+		_, _ = w.Write([]byte(`not found`))
 	}))
 	defer server.Close()
 

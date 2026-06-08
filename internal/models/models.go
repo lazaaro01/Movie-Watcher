@@ -8,17 +8,17 @@ import (
 
 type Cinema struct {
 	gorm.Model
-	ExternalID     string
-	Name           string
-	URLKey         string
-	CityID         string
-	CityName       string
-	State          string
-	UF             string
-	Address        string
-	Neighborhood   string
-	Partnership    string
-	TotalRooms     int
+	ExternalID   string
+	Name         string
+	URLKey       string
+	CityID       string
+	CityName     string
+	State        string
+	UF           string
+	Address      string
+	Neighborhood string
+	Partnership  string
+	TotalRooms   int
 }
 
 type Movie struct {
@@ -40,25 +40,25 @@ type Movie struct {
 
 type Session struct {
 	gorm.Model
-	ExternalID   string
-	MovieID      uint
-	MovieTitle   string
-	TheaterID    uint
-	Room         string
-	RoomID       string
-	DateTime     time.Time
-	Price        float64
-	Enabled      bool
+	ExternalID       string
+	MovieID          uint
+	MovieTitle       string
+	TheaterID        uint
+	Room             string
+	RoomID           string
+	DateTime         time.Time
+	Price            float64
+	Enabled          bool
 	HasSeatSelection bool
-	DefaultSector string
-	ExternalURL  string
-	SessionType  string
+	DefaultSector    string
+	ExternalURL      string
+	SessionType      string
 }
 
 type Monitoring struct {
 	gorm.Model
-	SessionID      uint     `gorm:"index"`
-	Session        Session  `gorm:"foreignKey:SessionID"`
+	SessionID      uint    `gorm:"index"`
+	Session        Session `gorm:"foreignKey:SessionID"`
 	LastPrice      float64
 	LastEnabled    bool
 	Active         bool

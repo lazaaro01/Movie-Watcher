@@ -55,18 +55,18 @@ func (c *Client) get(url string) ([]byte, error) {
 }
 
 type TheaterItem struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	URLKey      string `json:"urlKey"`
-	CityID      string `json:"cityId"`
-	CityName    string `json:"cityName"`
-	State       string `json:"state"`
-	UF          string `json:"uf"`
-	Address     string `json:"address"`
-	Number      string `json:"number"`
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	URLKey       string `json:"urlKey"`
+	CityID       string `json:"cityId"`
+	CityName     string `json:"cityName"`
+	State        string `json:"state"`
+	UF           string `json:"uf"`
+	Address      string `json:"address"`
+	Number       string `json:"number"`
 	Neighborhood string `json:"neighborhood"`
-	TotalRooms  int    `json:"totalRooms"`
-	Enabled     bool   `json:"enabled"`
+	TotalRooms   int    `json:"totalRooms"`
+	Enabled      bool   `json:"enabled"`
 }
 
 type TheaterListResponse struct {
@@ -90,19 +90,19 @@ func (c *Client) GetTheaters() (*TheaterListResponse, error) {
 }
 
 type MovieItem struct {
-	ID          string `json:"id"`
-	Title       string `json:"title"`
-	OriginalTitle string `json:"originalTitle"`
-	Duration    string `json:"duration"`
-	ContentRating string `json:"contentRating"`
-	Synopsis    string `json:"synopsis"`
-	Cast        string `json:"cast"`
-	Director    string `json:"director"`
-	Distributor string `json:"distributor"`
-	URLKey      string `json:"urlKey"`
-	IsPlaying   bool   `json:"isPlaying"`
-	Genres      []string `json:"genres"`
-	ImageFeatured string `json:"imageFeatured"`
+	ID            string   `json:"id"`
+	Title         string   `json:"title"`
+	OriginalTitle string   `json:"originalTitle"`
+	Duration      string   `json:"duration"`
+	ContentRating string   `json:"contentRating"`
+	Synopsis      string   `json:"synopsis"`
+	Cast          string   `json:"cast"`
+	Director      string   `json:"director"`
+	Distributor   string   `json:"distributor"`
+	URLKey        string   `json:"urlKey"`
+	IsPlaying     bool     `json:"isPlaying"`
+	Genres        []string `json:"genres"`
+	ImageFeatured string   `json:"imageFeatured"`
 }
 
 type MovieListResponse struct {
@@ -134,8 +134,8 @@ type SessionDate struct {
 }
 
 type SessionType struct {
-	ID   int    `json:"id"`
-	Name string `json:"name"`
+	ID    int    `json:"id"`
+	Name  string `json:"name"`
 	Alias string `json:"alias"`
 }
 
@@ -145,34 +145,34 @@ type SessionRoom struct {
 }
 
 type SessionItem struct {
-	ID              string      `json:"id"`
-	Price           float64     `json:"price"`
-	Room            string      `json:"room"`
-	Type            []string    `json:"type"`
-	Types           []SessionType `json:"types"`
-	Date            SessionDate `json:"date"`
-	HasSeatSelection bool      `json:"hasSeatSelection"`
-	DefaultSector   string      `json:"defaultSector"`
-	Enabled         bool        `json:"enabled"`
-	ExternalURL     string      `json:"siteURL"`
+	ID               string        `json:"id"`
+	Price            float64       `json:"price"`
+	Room             string        `json:"room"`
+	Type             []string      `json:"type"`
+	Types            []SessionType `json:"types"`
+	Date             SessionDate   `json:"date"`
+	HasSeatSelection bool          `json:"hasSeatSelection"`
+	DefaultSector    string        `json:"defaultSector"`
+	Enabled          bool          `json:"enabled"`
+	ExternalURL      string        `json:"siteURL"`
 }
 
 type MovieSession struct {
-	ID             string       `json:"id"`
-	Title          string       `json:"title"`
-	Duration       string       `json:"duration"`
-	URLKey         string       `json:"urlKey"`
-	ContentRating  string       `json:"contentRating"`
-	Genres         []string     `json:"genres"`
-	Rooms          []SessionRoom `json:"rooms"`
+	ID            string        `json:"id"`
+	Title         string        `json:"title"`
+	Duration      string        `json:"duration"`
+	URLKey        string        `json:"urlKey"`
+	ContentRating string        `json:"contentRating"`
+	Genres        []string      `json:"genres"`
+	Rooms         []SessionRoom `json:"rooms"`
 }
 
 type TheaterSession struct {
-	Date        string         `json:"date"`
-	DateFormatted string       `json:"dateFormatted"`
-	DayOfWeek   string         `json:"dayOfWeek"`
-	IsToday     bool           `json:"isToday"`
-	Movies      []MovieSession `json:"movies"`
+	Date          string         `json:"date"`
+	DateFormatted string         `json:"dateFormatted"`
+	DayOfWeek     string         `json:"dayOfWeek"`
+	IsToday       bool           `json:"isToday"`
+	Movies        []MovieSession `json:"movies"`
 }
 
 func (c *Client) GetSessions(theaterID int) ([]TheaterSession, error) {
@@ -191,16 +191,16 @@ func (c *Client) GetSessions(theaterID int) ([]TheaterSession, error) {
 }
 
 type SessionDetail struct {
-	ID              string        `json:"id"`
-	Price           float64       `json:"price"`
-	Room            string        `json:"room"`
-	Type            []string      `json:"type"`
-	Date            SessionDate   `json:"date"`
-	HasSeatSelection bool         `json:"hasSeatSelection"`
-	DefaultSector   string        `json:"defaultSector"`
-	Enabled         bool          `json:"enabled"`
-	ExternalURL     string        `json:"siteURL"`
-	Theater         struct {
+	ID               string      `json:"id"`
+	Price            float64     `json:"price"`
+	Room             string      `json:"room"`
+	Type             []string    `json:"type"`
+	Date             SessionDate `json:"date"`
+	HasSeatSelection bool        `json:"hasSeatSelection"`
+	DefaultSector    string      `json:"defaultSector"`
+	Enabled          bool        `json:"enabled"`
+	ExternalURL      string      `json:"siteURL"`
+	Theater          struct {
 		ID   string `json:"id"`
 		Name string `json:"name"`
 	} `json:"theater"`

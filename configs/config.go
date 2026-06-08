@@ -9,12 +9,12 @@ import (
 )
 
 type Config struct {
-	Telegram   TelegramConfig   `mapstructure:"telegram"`
-	Monitor    MonitorConfig    `mapstructure:"monitor"`
-	Database   DatabaseConfig   `mapstructure:"database"`
-	CityID     int              `mapstructure:"city_id"`
-	TheaterID  int              `mapstructure:"theater_id"`
-	Partnership string          `mapstructure:"partnership"`
+	Telegram    TelegramConfig `mapstructure:"telegram"`
+	Monitor     MonitorConfig  `mapstructure:"monitor"`
+	Database    DatabaseConfig `mapstructure:"database"`
+	CityID      int            `mapstructure:"city_id"`
+	TheaterID   int            `mapstructure:"theater_id"`
+	Partnership string         `mapstructure:"partnership"`
 }
 
 type TelegramConfig struct {
@@ -62,11 +62,11 @@ func Init() error {
 	if err := v.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
 			AppConfig = &Config{
-				Telegram:   TelegramConfig{},
-				Monitor:    MonitorConfig{IntervalMinutes: 5},
-				Database:   DatabaseConfig{Path: "./movie-watcher.db"},
-				CityID:     36,
-				TheaterID:  1446,
+				Telegram:    TelegramConfig{},
+				Monitor:     MonitorConfig{IntervalMinutes: 5},
+				Database:    DatabaseConfig{Path: "./movie-watcher.db"},
+				CityID:      36,
+				TheaterID:   1446,
 				Partnership: "cinepolis",
 			}
 			return nil

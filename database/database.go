@@ -4,8 +4,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/opencode/movie-watcher/internal/models"
 	"github.com/glebarez/sqlite"
+	"github.com/opencode/movie-watcher/internal/models"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -15,7 +15,7 @@ var DB *gorm.DB
 func Init(dbPath string) error {
 	dir := filepath.Dir(dbPath)
 	if dir != "." {
-		os.MkdirAll(dir, 0755)
+		_ = os.MkdirAll(dir, 0755)
 	}
 
 	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{

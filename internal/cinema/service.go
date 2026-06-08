@@ -51,19 +51,19 @@ func (s *Service) updateOrCreateMovie(item api.MovieItem) (*models.Movie, error)
 
 func (s *Service) updateOrCreateSession(sessionID string, movie *models.Movie, theaterID uint, room string, roomID string, dateTime time.Time, price float64, enabled bool, hasSeatSelection bool, defaultSector string, externalURL string, sessionTypeInfo string) (*models.Session, error) {
 	session := &models.Session{
-		ExternalID:   sessionID,
-		MovieID:      movie.ID,
-		MovieTitle:   movie.Title,
-		TheaterID:    theaterID,
-		Room:         room,
-		RoomID:       roomID,
-		DateTime:     dateTime,
-		Price:        price,
-		Enabled:      enabled,
+		ExternalID:       sessionID,
+		MovieID:          movie.ID,
+		MovieTitle:       movie.Title,
+		TheaterID:        theaterID,
+		Room:             room,
+		RoomID:           roomID,
+		DateTime:         dateTime,
+		Price:            price,
+		Enabled:          enabled,
 		HasSeatSelection: hasSeatSelection,
-		DefaultSector: defaultSector,
-		ExternalURL:  externalURL,
-		SessionType:  sessionTypeInfo,
+		DefaultSector:    defaultSector,
+		ExternalURL:      externalURL,
+		SessionType:      sessionTypeInfo,
 	}
 
 	err := database.GetDB().Where("external_id = ?", sessionID).Assign(session).FirstOrCreate(session).Error
@@ -202,11 +202,11 @@ func (s *Service) GetCinemas() ([]models.Cinema, error) {
 }
 
 type SessionCheckResult struct {
-	Session   models.Session
-	OldPrice  float64
+	Session    models.Session
+	OldPrice   float64
 	OldEnabled bool
-	Changed   bool
-	Message   string
+	Changed    bool
+	Message    string
 }
 
 func (s *Service) CheckSession(session models.Session, monitoring models.Monitoring) (*SessionCheckResult, error) {

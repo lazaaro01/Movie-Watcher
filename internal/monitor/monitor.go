@@ -86,7 +86,9 @@ func (r *Runner) Start(sessionID uint) error {
 	fmt.Println(msg)
 
 	if r.notifier.IsEnabled() {
-		r.notifier.SendMessage(msg)
+		if err := r.notifier.SendMessage(msg); err != nil {
+			fmt.Printf("Error sending notification: %v\n", err)
+		}
 	}
 
 	_ = monitor
@@ -131,5 +133,3 @@ func (r *Runner) Status() error {
 
 	return nil
 }
-
-
