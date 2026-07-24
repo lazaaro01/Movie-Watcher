@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/olekukonko/tablewriter"
 	"github.com/opencode/movie-watcher/internal/cinema"
 	"github.com/opencode/movie-watcher/internal/models"
 	"github.com/opencode/movie-watcher/internal/notifier"
@@ -21,6 +20,22 @@ var (
 	moviesNotify  bool
 )
 
+func renderMovies(movies []models.Movie) {
+	table := newTable([]string{"ID", "Título", "Gênero", "Duração", "Classificação"})
+
+	for _, m := range movies {
+		table.Append([]string{
+			fmt.Sprintf("%d", m.ID),
+			m.Title,
+			m.Genre,
+			fmt.Sprintf("%d min", m.Duration),
+			ratingOrDefault(m.ContentRating),
+		})
+	}
+
+	table.Render()
+}
+
 var moviesListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "Lista filmes em cartaz",
@@ -35,7 +50,7 @@ var moviesListCmd = &cobra.Command{
 			movies, err = service.ListMovies()
 		}
 		if err != nil {
-			fmt.Printf("Erro: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Erro: %v\n", err)
 			os.Exit(1)
 		}
 
@@ -44,40 +59,16 @@ var moviesListCmd = &cobra.Command{
 			return
 		}
 
-		table := tablewriter.NewWriter(os.Stdout)
-		table.SetHeader([]string{"ID", "Título", "Gênero", "Duração", "Classificação"})
-		table.SetBorder(false)
-		table.SetColumnSeparator("  ")
-
-		for _, m := range movies {
-			rating := m.ContentRating
-			if rating == "" {
-				rating = "Livre"
-			}
-			table.Append([]string{
-				fmt.Sprintf("%d", m.ID),
-				m.Title,
-				m.Genre,
-				fmt.Sprintf("%d min", m.Duration),
-				rating,
-			})
-		}
-
-		table.Render()
+		renderMovies(movies)
 
 		if moviesNotify {
 			n := notifier.New()
 			msg := "*🎬 Filmes em cartaz — RioMar Kennedy*\n\n"
 			for _, m := range movies {
-				rating := m.ContentRating
-				if rating == "" {
-					rating = "Livre"
-				}
-				msg += fmt.Sprintf("• *%s*\n  %s · %d min · %s\n", m.Title, m.Genre, m.Duration, rating)
+				msg += fmt.Sprintf("• *%s*\n  %s · %d min · %s\n", m.Title, m.Genre, m.Duration, ratingOrDefault(m.ContentRating))
 			}
-			err := n.SendMessage(msg)
-			if err != nil {
-				fmt.Printf("Erro ao enviar para Telegram: %v\n", err)
+			if err := n.SendMessage(msg); err != nil {
+				fmt.Fprintf(os.Stderr, "Erro ao enviar para Telegram: %v\n", err)
 			}
 		}
 	},
@@ -91,7 +82,7 @@ var moviesSearchCmd = &cobra.Command{
 		service := cinema.NewService()
 		movies, err := service.SearchMovies(args[0])
 		if err != nil {
-			fmt.Printf("Erro: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Erro: %v\n", err)
 			os.Exit(1)
 		}
 
@@ -100,26 +91,7 @@ var moviesSearchCmd = &cobra.Command{
 			return
 		}
 
-		table := tablewriter.NewWriter(os.Stdout)
-		table.SetHeader([]string{"ID", "Título", "Gênero", "Duração", "Classificação"})
-		table.SetBorder(false)
-		table.SetColumnSeparator("  ")
-
-		for _, m := range movies {
-			rating := m.ContentRating
-			if rating == "" {
-				rating = "Livre"
-			}
-			table.Append([]string{
-				fmt.Sprintf("%d", m.ID),
-				m.Title,
-				m.Genre,
-				fmt.Sprintf("%d min", m.Duration),
-				rating,
-			})
-		}
-
-		table.Render()
+		renderMovies(movies)
 	},
 }
 

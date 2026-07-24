@@ -2,6 +2,7 @@ package notifier
 
 import (
 	"fmt"
+	"os"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/opencode/movie-watcher/configs"
@@ -17,18 +18,18 @@ func New() *Notifier {
 	cfg := configs.AppConfig
 
 	if cfg.Telegram.BotToken == "" {
-		fmt.Println("[notifier] Telegram não configurado: bot_token vazio em config.json")
+		fmt.Fprintln(os.Stderr, "[notifier] Telegram não configurado: bot_token vazio em config.json")
 		return &Notifier{enabled: false}
 	}
 
 	if cfg.Telegram.ChatID == 0 {
-		fmt.Println("[notifier] Telegram não configurado: chat_id = 0 em config.json")
+		fmt.Fprintln(os.Stderr, "[notifier] Telegram não configurado: chat_id = 0 em config.json")
 		return &Notifier{enabled: false}
 	}
 
 	bot, err := tgbotapi.NewBotAPI(cfg.Telegram.BotToken)
 	if err != nil {
-		fmt.Printf("[notifier] Erro ao conectar no Telegram: %v\n", err)
+		fmt.Fprintf(os.Stderr, "[notifier] Erro ao conectar no Telegram: %v\n", err)
 		return &Notifier{enabled: false}
 	}
 

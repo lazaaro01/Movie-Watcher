@@ -1,6 +1,6 @@
 # 🎬 Movie Watcher CLI
 
-Monitore sessões de cinema do **Cinépolis RioMar Kennedy (Fortaleza)** e receba alertas no **Telegram** quando houver mudanças de preço ou disponibilidade.
+Monitore sessões de cinema (Cinépolis, e outros parceiros do **Ingresso.com**) e receba alertas no **Telegram** quando houver mudanças de preço ou disponibilidade — em um ou vários cinemas ao mesmo tempo.
 
 ---
 
@@ -10,15 +10,18 @@ Monitore sessões de cinema do **Cinépolis RioMar Kennedy (Fortaleza)** e receb
 - [Instalação](#instalação)
 - [Configuração do Telegram](#configuração-do-telegram)
 - [Primeiros passos](#primeiros-passos)
+- [Cinemas monitorados](#cinemas-monitorados)
 - [Comandos](#comandos)
 - [Monitoramento contínuo](#monitoramento-contínuo)
+- [Histórico de preços](#histórico-de-preços)
 - [FAQ / Solução de problemas](#faq--solução-de-problemas)
+- [Detalhes técnicos e mudanças recentes](#detalhes-técnicos-e-mudanças-recentes)
 
 ---
 
 ## Pré-requisitos
 
-- **Go** 1.21+ instalado ([download](https://go.dev/dl/))
+- **Go** 1.25+ instalado ([download](https://go.dev/dl/))
 - Uma conta no **Telegram**
 - Acesso ao **BotFather** no Telegram
 
@@ -83,6 +86,15 @@ Edite o `config.json` com seus dados:
 }
 ```
 
+`city_id`, `theater_id` e `partnership` funcionam como o cinema **padrão**:
+usados sempre que nenhum cinema for explicitamente marcado com `cinemas add`
+(veja [Cinemas monitorados](#cinemas-monitorados)).
+
+> **Alternativa mais segura para o token**: em vez de deixar `bot_token` no
+> `config.json`, você pode definir a variável de ambiente `MW_TELEGRAM_BOTTOKEN`
+> (prefixo `MW_` + caminho do campo em maiúsculas). Útil em CI/servidores
+> onde não é desejável guardar segredos em disco.
+
 ### 4. Testar a notificação
 
 ```bash
@@ -138,6 +150,57 @@ Saída esperada:
 ```
 
 > **Anote o `ID` da sessão** (primeira coluna) — você vai usá-lo para monitorar.
+> Diferente de versões antigas, esse ID agora **permanece estável** entre
+> execuções de `sessions list` (veja [detalhes técnicos](#detalhes-técnicos-e-mudanças-recentes)).
+
+Se você tiver mais de um cinema marcado em `cinemas add`, uma coluna extra
+**Cinema** aparece na tabela para indicar de qual cinema é cada sessão.
+
+---
+
+## Cinemas monitorados
+
+Por padrão o CLI opera sobre um único cinema, o definido em `theater_id` no
+`config.json`. Se você quiser acompanhar **vários cinemas da mesma cidade**
+ao mesmo tempo, use os comandos `cinemas`:
+
+```bash
+# 1. Descobrir os cinemas disponíveis na cidade configurada (city_id)
+movie-watcher.exe cinemas sync
+
+# 2. Ver a lista (com o ID interno de cada um)
+movie-watcher.exe cinemas list
+```
+
+Saída esperada:
+```
+  ID  NOME                          BAIRRO         MONITORADO
+  1   Cinépolis RioMar Kennedy      Kennedy        Não
+  2   Cinemark Iguatemi             Papicu         Não
+```
+
+```bash
+# 3. Marcar os cinemas que você quer acompanhar
+movie-watcher.exe cinemas add 1
+movie-watcher.exe cinemas add 2
+
+# Para parar de acompanhar um cinema:
+movie-watcher.exe cinemas remove 2
+```
+
+A partir do momento em que **pelo menos um** cinema é marcado com
+`cinemas add`, os comandos `sessions list`, `monitor start-movie` e
+`monitor check` passam a considerar **todos os cinemas marcados**
+automaticamente — não é mais necessário informar nada extra. Se nenhum
+cinema for marcado, o comportamento padrão (usar `theater_id` do
+`config.json`) continua funcionando exatamente como antes.
+
+Para restringir uma busca a um único cinema específico (mesmo com vários
+marcados), use `--cinema <id>`:
+
+```bash
+movie-watcher.exe sessions list "Mestres do Universo" --cinema 1
+```
 
 ---
 
@@ -149,22 +212,37 @@ Saída esperada:
 |---------|-----------|
 | `movies list` | Lista filmes em cartaz (cache local) |
 | `movies list --refresh` | Lista filmes forçando busca na API |
+| `movies list --notify` | Também envia a lista para o Telegram |
 | `movies search <nome>` | Busca filme por nome |
+
+### Cinemas
+
+| Comando | Descrição |
+|---------|-----------|
+| `cinemas sync` | Busca a lista de cinemas disponíveis na cidade configurada |
+| `cinemas list` | Lista cinemas conhecidos e quais estão sendo monitorados |
+| `cinemas search <nome>` | Busca cinema por nome |
+| `cinemas add <id>` | Marca um cinema (ID interno) para ser monitorado |
+| `cinemas remove <id>` | Remove um cinema do monitoramento |
 
 ### Sessões
 
 | Comando | Descrição |
 |---------|-----------|
-| `sessions list <filme>` | Lista sessões de um filme no RioMar Kennedy |
+| `sessions list <filme>` | Lista sessões de um filme nos cinemas monitorados (ou no padrão do config) |
+| `sessions list <filme> --cinema <id>` | Restringe a busca a um único cinema |
+| `sessions list <filme> --notify` | Também envia o resultado para o Telegram |
 
 ### Monitoramento
 
 | Comando | Descrição |
 |---------|-----------|
-| `monitor start <id>` | Inicia monitoramento de uma sessão |
-| `monitor stop <id>` | Para o monitoramento |
+| `monitor start <session_id>` | Inicia monitoramento de uma sessão |
+| `monitor start-movie <filme>` | Inicia monitoramento de **todas** as sessões de um filme de uma vez |
+| `monitor stop <session_id>` | Para o monitoramento de uma sessão |
 | `monitor status` | Lista monitores ativos |
 | `monitor check` | Executa verificação única (para agendador) |
+| `monitor history <session_id>` | Mostra o histórico de preços de uma sessão monitorada |
 
 ### Configuração
 
@@ -182,7 +260,7 @@ Saída esperada:
 
 | Comando | Descrição |
 |---------|-----------|
-| `sync` | Atualiza dados de filmes e cinemas da API |
+| `sync` | Atualiza dados de filmes e cinemas da API (equivalente a `cinemas sync` + `movies list --refresh`) |
 
 ---
 
@@ -195,7 +273,7 @@ O Movie Watcher não fica rodando em segundo plano. Em vez disso, ele é executa
 O fluxo é:
 
 ```
-Você → monitor start <id>
+Você → monitor start <id>  (ou monitor start-movie "<filme>")
           ↓
      (salva no banco de dados)
           ↓
@@ -207,6 +285,22 @@ Agendador (a cada 5 min) → monitor check
                             ↓
                      Se mudou → notifica no Telegram
 ```
+
+`monitor check` é seguro para rodar em paralelo: se uma execução anterior
+ainda estiver em andamento (trava por até 10 minutos), a nova chamada é
+recusada em vez de gerar notificações duplicadas ou dados inconsistentes.
+
+### Monitorar todas as sessões de um filme de uma vez
+
+Em vez de anotar e monitorar sessão por sessão:
+
+```bash
+movie-watcher.exe monitor start-movie "Mestres do Universo"
+```
+
+Isso carrega as sessões do filme em todos os cinemas monitorados (ou no
+cinema padrão, se nenhum estiver marcado) e inicia o monitoramento de cada
+uma, enviando uma única notificação resumo no Telegram.
 
 ### No Windows (Task Scheduler)
 
@@ -229,6 +323,30 @@ crontab -e
 # Adicionar linha (executa a cada 5 minutos)
 */5 * * * * /caminho/para/movie-watcher monitor check
 ```
+
+---
+
+## Histórico de preços
+
+Toda vez que uma sessão é monitorada (`monitor start` / `start-movie`) ou
+verificada (`monitor check`), o preço e a disponibilidade no momento ficam
+registrados. Para consultar essa série histórica:
+
+```bash
+movie-watcher.exe monitor history 4
+```
+
+Saída esperada:
+```
+Histórico de preços — Mestres Do Universo — Sala 1 18:30
+
+  DATA/HORA           PREÇO      STATUS        VARIAÇÃO
+  08/06 10:00:00       R$ 34.20   Disponível    —
+  08/06 15:00:05       R$ 31.90   Disponível    ▼ R$ 2.30
+  08/06 18:00:02       R$ 31.90   Disponível    =
+```
+
+Útil para decidir se vale a pena esperar o preço cair antes de comprar.
 
 ---
 
@@ -268,10 +386,60 @@ As sessões expiram após o horário da sessão. Execute `sessions list` novamen
 movie-watcher.exe sessions list "Nome do Filme"
 ```
 
+Se isso acontecer logo depois de iniciar um monitoramento, não deveria mais
+ocorrer: o ID de uma sessão monitorada agora é preservado entre atualizações
+(veja [detalhes técnicos](#detalhes-técnicos-e-mudanças-recentes)). O erro só
+aparece de fato quando a sessão saiu de cartaz.
+
+### "já existe uma verificação em andamento"
+
+O `monitor check` está protegido contra execuções simultâneas. Se você vir
+essa mensagem, é porque outra chamada de `monitor check` ainda está em
+andamento (ou travou há menos de 10 minutos). Normalmente basta aguardar a
+próxima janela do agendador.
+
 ### Quais mudanças são detectadas?
 
 - **Preço** alterado (ex: R$ 34,20 → R$ 31,90)
 - **Disponibilidade** alterada (sessão ativada/desativada)
+
+---
+
+## Detalhes técnicos e mudanças recentes
+
+Resumo do que foi corrigido/adicionado na última revisão do projeto, para
+quem já conhecia versões anteriores:
+
+- **Correção: `sessions list` não apaga mais sessões de outros cinemas.**
+  Antes, toda atualização de sessões apagava a tabela inteira antes de
+  recarregar; agora só são removidas as sessões do cinema que está sendo
+  atualizado e que realmente saíram do cartaz.
+- **Correção: o ID de uma sessão monitorada agora é estável.** Antes, cada
+  `sessions list` recriava todas as linhas do zero (mesmo as que não tinham
+  mudado), o que trocava o ID interno e quebrava monitoramentos em
+  andamento — essa era a causa mais provável do erro "Sessão não
+  encontrada". Agora sessões já existentes são atualizadas no lugar.
+- **Correção: erros de banco não são mais ignorados silenciosamente** em
+  `monitor check` (ex: falha ao desativar um monitor órfão).
+- **Correção: `monitor check` não roda mais em paralelo consigo mesmo.** Um
+  lock em arquivo (`<database>.lock`, válido por até 10 min) evita
+  notificações duplicadas se o agendador disparar uma nova checagem antes da
+  anterior terminar.
+- **Qualidade**: mensagens de erro/diagnóstico agora vão para *stderr* (e
+  não se misturam mais com a saída "de verdade" no *stdout*, o que facilita
+  redirecionar/logar); renderização de tabelas e rótulos repetidos
+  (status, classificação etária) foram unificados em um único helper.
+- **Testes**: novos testes cobrem o comportamento de `LoadSessions` (não
+  apagar sessões de outro cinema, preservar ID em refresh, remover apenas
+  sessões que saíram do cartaz), o lock de `monitor check` e o registro de
+  histórico de preços.
+- **Nova funcionalidade**: `monitor start-movie` monitora todas as sessões
+  de um filme de uma vez.
+- **Nova funcionalidade**: suporte a múltiplos cinemas (`cinemas sync/list/
+  search/add/remove`), com `sessions list`, `monitor start-movie` e
+  `monitor check` operando sobre todos os cinemas marcados.
+- **Nova funcionalidade**: histórico de preços por sessão
+  (`monitor history <id>`).
 
 ---
 

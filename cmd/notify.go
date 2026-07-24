@@ -20,7 +20,7 @@ var notifyTestCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		n := notifier.New()
 		if err := n.Test(); err != nil {
-			fmt.Printf("Erro: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Erro: %v\n", err)
 			os.Exit(1)
 		}
 		fmt.Println("Mensagem de teste enviada com sucesso!")
@@ -33,7 +33,7 @@ var syncCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		service := cinema.NewService()
 		if err := service.RefreshDB(); err != nil {
-			fmt.Printf("Erro ao sincronizar: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Erro ao sincronizar: %v\n", err)
 			os.Exit(1)
 		}
 		fmt.Println("Dados sincronizados com sucesso!")

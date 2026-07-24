@@ -19,6 +19,7 @@ type Cinema struct {
 	Neighborhood string
 	Partnership  string
 	TotalRooms   int
+	Monitored    bool
 }
 
 type Movie struct {
@@ -63,4 +64,11 @@ type Monitoring struct {
 	LastEnabled    bool
 	Active         bool
 	NotifyOnChange bool
+}
+
+type PriceHistory struct {
+	gorm.Model
+	SessionID uint `gorm:"index"`
+	Price     float64
+	Enabled   bool
 }

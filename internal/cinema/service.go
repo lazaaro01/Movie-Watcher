@@ -49,24 +49,41 @@ func (s *Service) updateOrCreateMovie(item api.MovieItem) (*models.Movie, error)
 	return movie, err
 }
 
-func (s *Service) updateOrCreateSession(sessionID string, movie *models.Movie, theaterID uint, room string, roomID string, dateTime time.Time, price float64, enabled bool, hasSeatSelection bool, defaultSector string, externalURL string, sessionTypeInfo string) (*models.Session, error) {
+// sessionInput groups the fields needed to upsert a session, avoiding a
+// long positional-argument list that's easy to get wrong at the call site.
+type sessionInput struct {
+	ExternalID       string
+	Movie            *models.Movie
+	TheaterID        uint
+	Room             string
+	RoomID           string
+	DateTime         time.Time
+	Price            float64
+	Enabled          bool
+	HasSeatSelection bool
+	DefaultSector    string
+	ExternalURL      string
+	SessionType      string
+}
+
+func (s *Service) updateOrCreateSession(in sessionInput) (*models.Session, error) {
 	session := &models.Session{
-		ExternalID:       sessionID,
-		MovieID:          movie.ID,
-		MovieTitle:       movie.Title,
-		TheaterID:        theaterID,
-		Room:             room,
-		RoomID:           roomID,
-		DateTime:         dateTime,
-		Price:            price,
-		Enabled:          enabled,
-		HasSeatSelection: hasSeatSelection,
-		DefaultSector:    defaultSector,
-		ExternalURL:      externalURL,
-		SessionType:      sessionTypeInfo,
+		ExternalID:       in.ExternalID,
+		MovieID:          in.Movie.ID,
+		MovieTitle:       in.Movie.Title,
+		TheaterID:        in.TheaterID,
+		Room:             in.Room,
+		RoomID:           in.RoomID,
+		DateTime:         in.DateTime,
+		Price:            in.Price,
+		Enabled:          in.Enabled,
+		HasSeatSelection: in.HasSeatSelection,
+		DefaultSector:    in.DefaultSector,
+		ExternalURL:      in.ExternalURL,
+		SessionType:      in.SessionType,
 	}
 
-	err := database.GetDB().Where("external_id = ?", sessionID).Assign(session).FirstOrCreate(session).Error
+	err := database.GetDB().Where("external_id = ?", in.ExternalID).Assign(session).FirstOrCreate(session).Error
 	return session, err
 }
 
@@ -103,14 +120,18 @@ func (s *Service) SearchMovies(query string) ([]models.Movie, error) {
 	return movies, nil
 }
 
+// LoadSessions refreshes sessions for a single theater. It only touches rows
+// belonging to that theater: sessions still reported by the API are updated
+// in place (preserving their internal ID, which monitors and history rely
+// on), and only sessions that disappeared from this theater's feed are
+// removed.
 func (s *Service) LoadSessions(theaterID int) ([]models.Session, error) {
-	cfg := configs.AppConfig
 	sessionsResp, err := s.client.GetSessions(theaterID)
 	if err != nil {
 		return nil, fmt.Errorf("error fetching sessions: %w", err)
 	}
 
-	database.GetDB().Where("1 = 1").Delete(&models.Session{})
+	seenExternalIDs := make([]string, 0)
 
 	for _, day := range sessionsResp {
 		for _, movieSession := range day.Movies {
@@ -132,36 +153,66 @@ func (s *Service) LoadSessions(theaterID int) ([]models.Session, error) {
 						sessionTypeInfo = sess.Type[0]
 					}
 
-					_, err = s.updateOrCreateSession(
-						sess.ID,
-						&movie,
-						uint(cfg.TheaterID),
-						room.Name,
-						"",
-						dateTime,
-						sess.Price,
-						sess.Enabled,
-						sess.HasSeatSelection,
-						sess.DefaultSector,
-						sess.ExternalURL,
-						sessionTypeInfo,
-					)
+					_, err = s.updateOrCreateSession(sessionInput{
+						ExternalID:       sess.ID,
+						Movie:            &movie,
+						TheaterID:        uint(theaterID),
+						Room:             room.Name,
+						DateTime:         dateTime,
+						Price:            sess.Price,
+						Enabled:          sess.Enabled,
+						HasSeatSelection: sess.HasSeatSelection,
+						DefaultSector:    sess.DefaultSector,
+						ExternalURL:      sess.ExternalURL,
+						SessionType:      sessionTypeInfo,
+					})
 					if err != nil {
 						return nil, err
 					}
+
+					seenExternalIDs = append(seenExternalIDs, sess.ID)
 				}
 			}
 		}
 	}
 
+	staleQuery := database.GetDB().Where("theater_id = ?", theaterID)
+	if len(seenExternalIDs) > 0 {
+		staleQuery = staleQuery.Where("external_id NOT IN ?", seenExternalIDs)
+	}
+	if err := staleQuery.Delete(&models.Session{}).Error; err != nil {
+		return nil, fmt.Errorf("error removing stale sessions: %w", err)
+	}
+
 	var sessions []models.Session
-	database.GetDB().Order("date_time ASC").Find(&sessions)
+	database.GetDB().Where("theater_id = ?", theaterID).Order("date_time ASC").Find(&sessions)
 	return sessions, nil
 }
 
-func (s *Service) GetSessionsByMovie(movieTitle string) ([]models.Session, error) {
+// LoadSessionsForTheaters refreshes sessions for every theater ID given and
+// returns the combined, up-to-date list.
+func (s *Service) LoadSessionsForTheaters(theaterIDs []int) ([]models.Session, error) {
+	for _, id := range theaterIDs {
+		if _, err := s.LoadSessions(id); err != nil {
+			return nil, err
+		}
+	}
+
 	var sessions []models.Session
-	database.GetDB().Where("movie_title LIKE ?", "%"+movieTitle+"%").Order("date_time ASC").Find(&sessions)
+	database.GetDB().Where("theater_id IN ?", theaterIDs).Order("date_time ASC").Find(&sessions)
+	return sessions, nil
+}
+
+// GetSessionsByMovie returns sessions matching the given title, optionally
+// restricted to a set of theater IDs.
+func (s *Service) GetSessionsByMovie(movieTitle string, theaterIDs ...int) ([]models.Session, error) {
+	query := database.GetDB().Where("movie_title LIKE ?", "%"+movieTitle+"%")
+	if len(theaterIDs) > 0 {
+		query = query.Where("theater_id IN ?", theaterIDs)
+	}
+
+	var sessions []models.Session
+	query.Order("date_time ASC").Find(&sessions)
 	return sessions, nil
 }
 
@@ -201,6 +252,92 @@ func (s *Service) GetCinemas() ([]models.Cinema, error) {
 	return cinemas, nil
 }
 
+func (s *Service) SearchCinemas(query string) ([]models.Cinema, error) {
+	var cinemas []models.Cinema
+	database.GetDB().Where("name LIKE ?", "%"+query+"%").Order("name ASC").Find(&cinemas)
+	return cinemas, nil
+}
+
+func (s *Service) GetMonitoredCinemas() ([]models.Cinema, error) {
+	var cinemas []models.Cinema
+	database.GetDB().Where("monitored = ?", true).Order("name ASC").Find(&cinemas)
+	return cinemas, nil
+}
+
+// SetCinemaMonitored marks (or unmarks) a cinema, identified by its internal
+// ID, as one whose movies/sessions should be pulled in by default.
+func (s *Service) SetCinemaMonitored(id uint, monitored bool) error {
+	result := database.GetDB().Model(&models.Cinema{}).Where("id = ?", id).Update("monitored", monitored)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("cinema %d não encontrado", id)
+	}
+	return nil
+}
+
+// GetCinemaTheaterID resolves a cinema's internal ID to the external
+// theater ID used by the Ingresso.com API.
+func (s *Service) GetCinemaTheaterID(cinemaID uint) (int, error) {
+	var c models.Cinema
+	if err := database.GetDB().First(&c, cinemaID).Error; err != nil {
+		return 0, fmt.Errorf("cinema %d não encontrado: %w", cinemaID, err)
+	}
+	theaterID, err := strconv.Atoi(c.ExternalID)
+	if err != nil {
+		return 0, fmt.Errorf("cinema %d tem external_id inválido: %w", cinemaID, err)
+	}
+	return theaterID, nil
+}
+
+func (s *Service) GetCinemaByTheaterID(theaterID uint) (*models.Cinema, error) {
+	var c models.Cinema
+	err := database.GetDB().Where("external_id = ?", strconv.Itoa(int(theaterID))).First(&c).Error
+	if err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
+// GetCinemaNamesByTheaterIDs returns a best-effort map of theater ID to
+// cinema name, skipping any theater that hasn't been synced yet.
+func (s *Service) GetCinemaNamesByTheaterIDs(theaterIDs []int) map[int]string {
+	names := make(map[int]string, len(theaterIDs))
+	for _, id := range theaterIDs {
+		var c models.Cinema
+		if err := database.GetDB().Where("external_id = ?", strconv.Itoa(id)).First(&c).Error; err != nil {
+			continue
+		}
+		names[id] = c.Name
+	}
+	return names
+}
+
+// ResolveTheaterIDs returns the theater IDs to operate on: every cinema
+// explicitly marked as monitored, or the config's default theater as a
+// fallback when none has been marked yet.
+func (s *Service) ResolveTheaterIDs() ([]int, error) {
+	cinemas, err := s.GetMonitoredCinemas()
+	if err != nil {
+		return nil, err
+	}
+
+	ids := make([]int, 0, len(cinemas))
+	for _, c := range cinemas {
+		id, err := strconv.Atoi(c.ExternalID)
+		if err != nil {
+			continue
+		}
+		ids = append(ids, id)
+	}
+
+	if len(ids) == 0 {
+		return []int{configs.AppConfig.TheaterID}, nil
+	}
+	return ids, nil
+}
+
 type SessionCheckResult struct {
 	Session    models.Session
 	OldPrice   float64
@@ -238,10 +375,20 @@ func (s *Service) CheckSession(session models.Session, monitoring models.Monitor
 		result.Changed = true
 	}
 
-	database.GetDB().Model(&monitoring).Updates(map[string]interface{}{
+	if err := database.GetDB().Model(&monitoring).Updates(map[string]interface{}{
 		"last_price":   detail.Price,
 		"last_enabled": detail.Enabled,
-	})
+	}).Error; err != nil {
+		return nil, fmt.Errorf("error updating monitoring state: %w", err)
+	}
+
+	if err := database.GetDB().Create(&models.PriceHistory{
+		SessionID: session.ID,
+		Price:     detail.Price,
+		Enabled:   detail.Enabled,
+	}).Error; err != nil {
+		return nil, fmt.Errorf("error recording price history: %w", err)
+	}
 
 	if result.Changed {
 		result.Message = fmt.Sprintf("🎬 *%s* — %s %s\n%s",
@@ -277,8 +424,19 @@ func (s *Service) StartMonitoring(sessionID uint) (*models.Monitoring, error) {
 		NotifyOnChange: true,
 	}
 
-	err := database.GetDB().Where("session_id = ?", session.ID).Assign(monitoring).FirstOrCreate(monitoring).Error
-	return monitoring, err
+	if err := database.GetDB().Where("session_id = ?", session.ID).Assign(monitoring).FirstOrCreate(monitoring).Error; err != nil {
+		return nil, err
+	}
+
+	if err := database.GetDB().Create(&models.PriceHistory{
+		SessionID: session.ID,
+		Price:     session.Price,
+		Enabled:   session.Enabled,
+	}).Error; err != nil {
+		return nil, fmt.Errorf("error recording price history: %w", err)
+	}
+
+	return monitoring, nil
 }
 
 func (s *Service) StopMonitoring(sessionID uint) error {
@@ -297,4 +455,10 @@ func (s *Service) GetSessionByID(id uint) (*models.Session, error) {
 		return nil, err
 	}
 	return &session, nil
+}
+
+func (s *Service) GetPriceHistory(sessionID uint) ([]models.PriceHistory, error) {
+	var history []models.PriceHistory
+	database.GetDB().Where("session_id = ?", sessionID).Order("created_at ASC").Find(&history)
+	return history, nil
 }

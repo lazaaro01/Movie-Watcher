@@ -18,7 +18,7 @@ var configInitCmd = &cobra.Command{
 	Short: "Gera arquivo config.json padrão",
 	Run: func(cmd *cobra.Command, args []string) {
 		if err := configs.WriteDefaultConfig(); err != nil {
-			fmt.Printf("Erro ao gerar config.json: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Erro ao gerar config.json: %v\n", err)
 			os.Exit(1)
 		}
 		fmt.Println("config.json criado com sucesso!")

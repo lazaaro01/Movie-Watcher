@@ -30,6 +30,7 @@ func Init(dbPath string) error {
 		&models.Movie{},
 		&models.Session{},
 		&models.Monitoring{},
+		&models.PriceHistory{},
 	)
 	if err != nil {
 		return err
