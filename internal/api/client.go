@@ -40,7 +40,7 @@ func (c *Client) get(url string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error executing request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

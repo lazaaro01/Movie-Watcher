@@ -136,7 +136,7 @@ func (r *Runner) StartMovie(movieTitle string) error {
 	}
 
 	var summary strings.Builder
-	summary.WriteString(fmt.Sprintf("🎬 Monitoramento iniciado para *%s* (%d sessões)\n", movieTitle, len(sessions)))
+	fmt.Fprintf(&summary, "🎬 Monitoramento iniciado para *%s* (%d sessões)\n", movieTitle, len(sessions))
 
 	started := 0
 	for _, session := range sessions {
