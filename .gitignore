@@ -1,6 +1,7 @@
 movie-watcher.db
 config.json
 .env
+FEATURES.md
 *.exe
 *.exe~
 *.dll
