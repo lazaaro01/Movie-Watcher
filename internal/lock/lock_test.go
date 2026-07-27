@@ -1,4 +1,4 @@
-package monitor
+package lock
 
 import (
 	"os"
@@ -10,13 +10,13 @@ import (
 func TestAcquireLockBlocksConcurrentRun(t *testing.T) {
 	lockPath := filepath.Join(t.TempDir(), "test.lock")
 
-	release, err := acquireLock(lockPath)
+	release, err := AcquireLock(lockPath)
 	if err != nil {
 		t.Fatalf("expected first lock to succeed: %v", err)
 	}
 	defer release()
 
-	if _, err := acquireLock(lockPath); err == nil {
+	if _, err := AcquireLock(lockPath); err == nil {
 		t.Fatal("expected second concurrent lock to fail")
 	}
 }
@@ -24,7 +24,7 @@ func TestAcquireLockBlocksConcurrentRun(t *testing.T) {
 func TestAcquireLockReleaseAllowsNextRun(t *testing.T) {
 	lockPath := filepath.Join(t.TempDir(), "test.lock")
 
-	release, err := acquireLock(lockPath)
+	release, err := AcquireLock(lockPath)
 	if err != nil {
 		t.Fatalf("expected lock to succeed: %v", err)
 	}
@@ -34,7 +34,7 @@ func TestAcquireLockReleaseAllowsNextRun(t *testing.T) {
 		t.Fatal("expected lock file to be removed after release")
 	}
 
-	release2, err := acquireLock(lockPath)
+	release2, err := AcquireLock(lockPath)
 	if err != nil {
 		t.Fatalf("expected lock to succeed after release: %v", err)
 	}
@@ -47,12 +47,12 @@ func TestAcquireLockStealsStaleLock(t *testing.T) {
 	if err := os.WriteFile(lockPath, nil, 0644); err != nil {
 		t.Fatalf("failed to create fake stale lock: %v", err)
 	}
-	staleTime := time.Now().Add(-2 * lockStaleAfter)
+	staleTime := time.Now().Add(-2 * StaleAfter)
 	if err := os.Chtimes(lockPath, staleTime, staleTime); err != nil {
 		t.Fatalf("failed to backdate lock file: %v", err)
 	}
 
-	release, err := acquireLock(lockPath)
+	release, err := AcquireLock(lockPath)
 	if err != nil {
 		t.Fatalf("expected stale lock to be stolen: %v", err)
 	}

@@ -70,6 +70,13 @@ var sessionsListCmd = &cobra.Command{
 			theaterIDs = ids
 		}
 
+		// LoadSessions só mantém uma sessão se já existir o Movie
+		// correspondente localmente — garante isso antes, senão um banco
+		// novo (sem 'movies list' prévio) descarta as sessões em silêncio.
+		if _, err := service.ListMovies(); err != nil {
+			fmt.Fprintf(os.Stderr, "Erro ao carregar filmes: %v\n", err)
+		}
+
 		if _, err := service.LoadSessionsForTheaters(theaterIDs); err != nil {
 			fmt.Fprintf(os.Stderr, "Erro ao carregar sessões: %v\n", err)
 		}

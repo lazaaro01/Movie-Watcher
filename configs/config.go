@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/viper"
 )
@@ -56,22 +57,15 @@ func Init() error {
 	v.SetDefault("theater_id", 1446)
 	v.SetDefault("partnership", "cinepolis")
 
-	v.AutomaticEnv()
 	v.SetEnvPrefix("MW")
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	v.AutomaticEnv()
 
 	if err := v.ReadInConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			AppConfig = &Config{
-				Telegram:    TelegramConfig{},
-				Monitor:     MonitorConfig{IntervalMinutes: 5},
-				Database:    DatabaseConfig{Path: "./movie-watcher.db"},
-				CityID:      36,
-				TheaterID:   1446,
-				Partnership: "cinepolis",
-			}
-			return nil
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+			return fmt.Errorf("error reading config: %w", err)
 		}
-		return fmt.Errorf("error reading config: %w", err)
+		// Sem config.json: segue só com defaults + variáveis de ambiente.
 	}
 
 	var cfg Config

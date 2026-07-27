@@ -8,6 +8,7 @@ import (
 	"github.com/opencode/movie-watcher/configs"
 	"github.com/opencode/movie-watcher/database"
 	"github.com/opencode/movie-watcher/internal/cinema"
+	"github.com/opencode/movie-watcher/internal/lock"
 	"github.com/opencode/movie-watcher/internal/models"
 	"github.com/opencode/movie-watcher/internal/notifier"
 )
@@ -34,7 +35,7 @@ func (r *Runner) cinemaLabel(theaterID uint) string {
 
 func (r *Runner) CheckAll() error {
 	lockPath := configs.AppConfig.Database.Path + ".lock"
-	release, err := acquireLock(lockPath)
+	release, err := lock.AcquireLock(lockPath)
 	if err != nil {
 		return err
 	}

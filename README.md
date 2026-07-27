@@ -13,7 +13,9 @@ Monitore sessões de cinema (Cinépolis, e outros parceiros do **Ingresso.com**)
 - [Cinemas monitorados](#cinemas-monitorados)
 - [Comandos](#comandos)
 - [Monitoramento contínuo](#monitoramento-contínuo)
+- [Resumo diário](#resumo-diário)
 - [Histórico de preços](#histórico-de-preços)
+- [Deploy em produção](#deploy-em-produção)
 - [FAQ / Solução de problemas](#faq--solução-de-problemas)
 - [Detalhes técnicos e mudanças recentes](#detalhes-técnicos-e-mudanças-recentes)
 
@@ -91,9 +93,19 @@ usados sempre que nenhum cinema for explicitamente marcado com `cinemas add`
 (veja [Cinemas monitorados](#cinemas-monitorados)).
 
 > **Alternativa mais segura para o token**: em vez de deixar `bot_token` no
-> `config.json`, você pode definir a variável de ambiente `MW_TELEGRAM_BOTTOKEN`
-> (prefixo `MW_` + caminho do campo em maiúsculas). Útil em CI/servidores
-> onde não é desejável guardar segredos em disco.
+> `config.json`, você pode configurar tudo por variável de ambiente — não
+> precisa nem existir um `config.json` no diretório. Prefixo `MW_` + o
+> caminho do campo em maiúsculas, trocando "." por "_":
+> ```
+> MW_TELEGRAM_BOT_TOKEN=...
+> MW_TELEGRAM_CHAT_ID=...
+> MW_DATABASE_PATH=./movie-watcher.db
+> MW_CITY_ID=36
+> MW_THEATER_ID=1446
+> MW_PARTNERSHIP=cinepolis
+> ```
+> Essencial pra rodar em containers/CI, onde normalmente não se quer
+> guardar segredo em disco (veja [Deploy em produção](#deploy-em-produção)).
 
 ### 4. Testar a notificação
 
@@ -244,6 +256,12 @@ movie-watcher.exe sessions list "Mestres do Universo" --cinema 1
 | `monitor check` | Executa verificação única (para agendador) |
 | `monitor history <session_id>` | Mostra o histórico de preços de uma sessão monitorada |
 
+### Resumo diário
+
+| Comando | Descrição |
+|---------|-----------|
+| `digest run` | Envia no Telegram o resumo dos filmes em cartaz hoje, com botão de compra por sessão (veja [Resumo diário](#resumo-diário)) |
+
 ### Configuração
 
 | Comando | Descrição |
@@ -326,6 +344,48 @@ crontab -e
 
 ---
 
+## Resumo diário
+
+Diferente do `monitor check` (que só avisa sobre sessões que você registrou
+manualmente), o `digest run` é proativo: uma vez por dia, monta e envia
+sozinho um resumo de tudo que está em cartaz **hoje** nos cinemas
+monitorados — agrupado por filme, com um botão por horário levando direto
+pra página de compra da sessão no Ingresso.com.
+
+```bash
+movie-watcher.exe digest run
+```
+
+Cada sessão sem seleção de assento cai direto na finalização da compra; a
+única etapa manual que sobra pra você é pagar.
+
+### Promoção
+
+Sessões marcam "🔻 promoção" quando o preço caiu desde a última vez que a
+mesma sessão foi vista pelo próprio `digest run`. Não existe um campo de
+desconto nativo na API do Ingresso.com — a promoção é sempre inferida por
+queda de preço. Para funcionar de verdade (ter algo pra comparar), o
+`digest run` registra o preço de **todas as sessões futuras** dos cinemas
+monitorados a cada execução, não só as de hoje — assim, quando uma sessão
+"vira hoje", ela já tem histórico dos dias anteriores pra comparar. Preços
+sem histórico anterior nunca aparecem como promoção (não tem com o que
+comparar ainda).
+
+### Diferença para `monitor check`
+
+| | `monitor check` | `digest run` |
+|---|---|---|
+| Quando notifica | Só sessões registradas com `monitor start`/`start-movie` | Tudo que está em cartaz hoje, automaticamente |
+| Frequência recomendada | A cada 5 min | 1x por dia |
+| Precisa de ação manual antes | Sim (`monitor start`) | Não |
+| Lock de execução | `<database>.lock` | `<database>.digest.lock` (arquivo separado — os dois nunca disputam) |
+
+Os dois continuam sendo comandos **stateless disparados por agendador**;
+nenhum dos dois exige o app rodando continuamente (os botões de compra são
+de URL — o Telegram abre o link direto, sem o bot precisar reagir a nada).
+
+---
+
 ## Histórico de preços
 
 Toda vez que uma sessão é monitorada (`monitor start` / `start-movie`) ou
@@ -347,6 +407,62 @@ Histórico de preços — Mestres Do Universo — Sala 1 18:30
 ```
 
 Útil para decidir se vale a pena esperar o preço cair antes de comprar.
+
+---
+
+## Deploy em produção
+
+O Movie Watcher é um CLI stateless — não é um servidor web, não escuta
+porta nenhuma. Ele é feito pra ser disparado por um agendador (cron/Task
+Scheduler localmente, ou **Cron Schedule** de uma plataforma como a
+Railway), rodar até o fim e sair. Isso vale tanto pro `monitor check`
+quanto pro `digest run` — inclusive o botão de compra do resumo diário é um
+botão de **URL** do Telegram, que não chama o bot de volta, então nenhum
+dos dois comandos precisa de um serviço sempre ligado.
+
+Não precisa de `docker-compose`: o `Dockerfile` já existente builda a
+imagem sozinho: a plataforma de deploy escolhida é quem orquestra quando
+rodar (`docker-compose` serve pra orquestrar vários containers na sua
+própria infra — não é o caso aqui).
+
+### Passo a passo (Railway, mas o raciocínio vale pra qualquer PaaS com Cron Schedule)
+
+1. **Conectar o repositório**: *New Project* → *Deploy from GitHub repo* →
+   selecione este repositório. A plataforma detecta o `Dockerfile` e builda
+   automaticamente.
+
+2. **Adicionar um Volume** (crítico): monte um volume persistente, ex. em
+   `/data`. É nele que o `movie-watcher.db` precisa morar — sem isso, o
+   disco reseta a cada execução agendada e o app nunca detecta mudança de
+   preço nem monta histórico de promoção nenhum.
+
+3. **Variáveis de ambiente** (ver [Alternativa mais segura para o
+   token](#configuração-do-telegram) acima):
+   ```
+   MW_TELEGRAM_BOT_TOKEN=...
+   MW_TELEGRAM_CHAT_ID=...
+   MW_DATABASE_PATH=/data/movie-watcher.db
+   ```
+
+4. **Dois Cron Schedules**, apontando pra mesma imagem/volume:
+   - Um a cada 5 min, *Custom Start Command* = `monitor check`.
+   - Outro 1x por dia (horário de sua preferência), *Custom Start Command*
+     = `digest run`.
+
+5. **Configuração inicial**: `digest run` funciona sozinho assim que
+   houver sessões em cartaz — nada extra a fazer. Já `monitor check`
+   depende de sessões registradas com `monitor start`/`start-movie`; use o
+   *Shell* da plataforma (ou `railway ssh`) pra rodar esse comando uma vez
+   contra o mesmo volume, se quiser também usar o monitoramento silencioso
+   além do resumo diário.
+
+### O que NÃO vai acontecer sozinho
+
+Rodar isso agendado **não** enche seu Telegram de mensagens soltas: o
+`digest run` manda uma mensagem por filme, 1x por dia, e o `monitor check`
+só fala alguma coisa quando uma sessão registrada muda de preço/status. A
+lista completa de filmes só sai pro Telegram se você pedir explicitamente
+com `movies list --notify`/`sessions list --notify`.
 
 ---
 
@@ -440,6 +556,26 @@ quem já conhecia versões anteriores:
   `monitor check` operando sobre todos os cinemas marcados.
 - **Nova funcionalidade**: histórico de preços por sessão
   (`monitor history <id>`).
+- **Nova funcionalidade**: resumo diário proativo (`digest run`) com
+  detecção de queda de preço e botão de compra direto — veja [Resumo
+  diário](#resumo-diário).
+- **Correção: variáveis de ambiente (`MW_...`) agora funcionam mesmo sem
+  `config.json` no diretório.** Antes, a ausência do arquivo fazia o app
+  cair num fallback que ignorava totalmente as variáveis de ambiente —
+  quebrava exatamente o cenário de configurar tudo por env var num
+  container/deploy.
+- **Correção: `sessions list` (e `digest run`) não dependem mais de alguém
+  ter rodado `movies list` antes.** `LoadSessions` só mantém uma sessão se
+  já existir o filme correspondente localmente; agora os filmes são
+  carregados primeiro, então a primeira execução num banco novo já traz
+  sessões, sem precisar de uma chamada "de aquecimento" manual.
+- **Correção: log de "record not found" do GORM não polui mais a saída.**
+  Esperado com frequência pelo novo registro de histórico de preço (toda
+  sessão vista pela primeira vez cai nesse caso); o logger do banco agora
+  ignora esse erro específico e manda avisos reais para *stderr*.
+- **Refatoração**: o lock de arquivo (antes só em `monitor check`) foi
+  promovido para `internal/lock`, reaproveitado também pelo `digest run`
+  (com arquivo de lock próprio, para os dois nunca disputarem).
 
 ---
 

@@ -77,3 +77,44 @@ func (n *Notifier) SendMessage(text string) error {
 func (n *Notifier) IsEnabled() bool {
 	return n.enabled
 }
+
+// Button is a Telegram inline keyboard button that links straight to a URL
+// — Telegram opens the link client-side, it never calls back to the bot,
+// so callers don't need any interactive/webhook infrastructure to use it.
+type Button struct {
+	Label string
+	URL   string
+}
+
+// SendMessageWithButtons behaves like SendMessage but attaches one inline
+// URL button per row. When the notifier is disabled, it prints the text
+// and the button URLs to stdout, mirroring SendMessage's fallback.
+func (n *Notifier) SendMessageWithButtons(text string, buttons []Button) error {
+	if !n.enabled {
+		fmt.Println("[notifier] Telegram not configured. Message:")
+		fmt.Println(text)
+		for _, b := range buttons {
+			fmt.Printf("  [%s] %s\n", b.Label, b.URL)
+		}
+		return nil
+	}
+
+	msg := tgbotapi.NewMessage(n.chatID, text)
+	msg.ParseMode = "Markdown"
+
+	if len(buttons) > 0 {
+		rows := make([][]tgbotapi.InlineKeyboardButton, 0, len(buttons))
+		for _, b := range buttons {
+			rows = append(rows, tgbotapi.NewInlineKeyboardRow(
+				tgbotapi.NewInlineKeyboardButtonURL(b.Label, b.URL),
+			))
+		}
+		msg.ReplyMarkup = tgbotapi.NewInlineKeyboardMarkup(rows...)
+	}
+
+	if _, err := n.bot.Send(msg); err != nil {
+		return fmt.Errorf("error sending telegram message: %w", err)
+	}
+
+	return nil
+}

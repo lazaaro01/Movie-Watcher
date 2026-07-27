@@ -1,6 +1,7 @@
 package cinema
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/opencode/movie-watcher/database"
 	"github.com/opencode/movie-watcher/internal/api"
 	"github.com/opencode/movie-watcher/internal/models"
+	"gorm.io/gorm"
 )
 
 type Service struct {
@@ -103,6 +105,14 @@ func (s *Service) LoadMovies() ([]models.Movie, error) {
 	var movies []models.Movie
 	database.GetDB().Order("title ASC").Find(&movies)
 	return movies, nil
+}
+
+func (s *Service) GetMovieByID(id uint) (*models.Movie, error) {
+	var movie models.Movie
+	if err := database.GetDB().First(&movie, id).Error; err != nil {
+		return nil, err
+	}
+	return &movie, nil
 }
 
 func (s *Service) ListMovies() ([]models.Movie, error) {
@@ -214,6 +224,27 @@ func (s *Service) GetSessionsByMovie(movieTitle string, theaterIDs ...int) ([]mo
 	var sessions []models.Session
 	query.Order("date_time ASC").Find(&sessions)
 	return sessions, nil
+}
+
+// GetActiveSessions returns sessions for the given theaters that haven't
+// happened yet (today or later), ordered by date/time. Used both to build
+// the daily digest and to keep price history flowing for sessions before
+// they're actually shown to the user.
+func (s *Service) GetActiveSessions(theaterIDs []int) ([]models.Session, error) {
+	var sessions []models.Session
+	if err := database.GetDB().Where("theater_id IN ?", theaterIDs).
+		Order("date_time ASC, movie_title ASC").Find(&sessions).Error; err != nil {
+		return nil, err
+	}
+
+	now := time.Now()
+	result := make([]models.Session, 0, len(sessions))
+	for _, sess := range sessions {
+		if sess.DateTime.After(now) {
+			result = append(result, sess)
+		}
+	}
+	return result, nil
 }
 
 func (s *Service) UpdateCinemas() error {
@@ -461,4 +492,34 @@ func (s *Service) GetPriceHistory(sessionID uint) ([]models.PriceHistory, error)
 	var history []models.PriceHistory
 	database.GetDB().Where("session_id = ?", sessionID).Order("created_at ASC").Find(&history)
 	return history, nil
+}
+
+// RecordPriceSnapshot inserts a PriceHistory row for sessionID and reports
+// the previously recorded price, if any. Unlike StartMonitoring/
+// CheckSession, this doesn't require an active Monitoring row — it's used
+// to track price movement for any session (e.g. from the daily digest)
+// independent of whether the user asked to be notified about it.
+func (s *Service) RecordPriceSnapshot(sessionID uint, price float64, enabled bool) (previousPrice float64, hadPrevious bool, err error) {
+	var last models.PriceHistory
+	lookupErr := database.GetDB().Where("session_id = ?", sessionID).
+		Order("created_at DESC").First(&last).Error
+
+	switch {
+	case lookupErr == nil:
+		previousPrice, hadPrevious = last.Price, true
+	case errors.Is(lookupErr, gorm.ErrRecordNotFound):
+		// first time seeing this session — no previous price, not an error
+	default:
+		return 0, false, fmt.Errorf("error reading price history: %w", lookupErr)
+	}
+
+	if err := database.GetDB().Create(&models.PriceHistory{
+		SessionID: sessionID,
+		Price:     price,
+		Enabled:   enabled,
+	}).Error; err != nil {
+		return previousPrice, hadPrevious, fmt.Errorf("error recording price history: %w", err)
+	}
+
+	return previousPrice, hadPrevious, nil
 }

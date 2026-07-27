@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/opencode/movie-watcher/configs"
 	"github.com/opencode/movie-watcher/database"
@@ -205,5 +206,99 @@ func TestStartMonitoringRecordsPriceHistory(t *testing.T) {
 	}
 	if history[0].Price != 30 {
 		t.Errorf("expected recorded price 30, got %.2f", history[0].Price)
+	}
+}
+
+func TestRecordPriceSnapshotNoPrevious(t *testing.T) {
+	s := newTestService(t, func(w http.ResponseWriter, r *http.Request) {})
+
+	movie := models.Movie{ExternalID: "123", Title: "Movie A"}
+	database.GetDB().Create(&movie)
+	session := models.Session{ExternalID: "s1", MovieID: movie.ID, MovieTitle: movie.Title, Price: 30, Enabled: true}
+	database.GetDB().Create(&session)
+
+	_, hadPrevious, err := s.RecordPriceSnapshot(session.ID, session.Price, session.Enabled)
+	if err != nil {
+		t.Fatalf("RecordPriceSnapshot failed: %v", err)
+	}
+	if hadPrevious {
+		t.Fatal("expected no previous price on first snapshot")
+	}
+}
+
+func TestRecordPriceSnapshotDetectsDrop(t *testing.T) {
+	s := newTestService(t, func(w http.ResponseWriter, r *http.Request) {})
+
+	movie := models.Movie{ExternalID: "123", Title: "Movie A"}
+	database.GetDB().Create(&movie)
+	session := models.Session{ExternalID: "s1", MovieID: movie.ID, MovieTitle: movie.Title, Price: 34.20, Enabled: true}
+	database.GetDB().Create(&session)
+
+	if _, _, err := s.RecordPriceSnapshot(session.ID, 34.20, true); err != nil {
+		t.Fatalf("first RecordPriceSnapshot failed: %v", err)
+	}
+
+	previousPrice, hadPrevious, err := s.RecordPriceSnapshot(session.ID, 31.90, true)
+	if err != nil {
+		t.Fatalf("second RecordPriceSnapshot failed: %v", err)
+	}
+	if !hadPrevious {
+		t.Fatal("expected a previous price on second snapshot")
+	}
+	if previousPrice != 34.20 {
+		t.Errorf("expected previous price 34.20, got %.2f", previousPrice)
+	}
+}
+
+func TestRecordPriceSnapshotSameOrHigherPrice(t *testing.T) {
+	s := newTestService(t, func(w http.ResponseWriter, r *http.Request) {})
+
+	movie := models.Movie{ExternalID: "123", Title: "Movie A"}
+	database.GetDB().Create(&movie)
+	session := models.Session{ExternalID: "s1", MovieID: movie.ID, MovieTitle: movie.Title, Price: 30, Enabled: true}
+	database.GetDB().Create(&session)
+
+	if _, _, err := s.RecordPriceSnapshot(session.ID, 30, true); err != nil {
+		t.Fatalf("first RecordPriceSnapshot failed: %v", err)
+	}
+
+	previousPrice, hadPrevious, err := s.RecordPriceSnapshot(session.ID, 35, true)
+	if err != nil {
+		t.Fatalf("second RecordPriceSnapshot failed: %v", err)
+	}
+	if !hadPrevious || previousPrice != 30 {
+		t.Fatalf("expected previous price 30 (had=true), got %.2f (had=%v)", previousPrice, hadPrevious)
+	}
+}
+
+func TestGetActiveSessionsFiltersTheaterAndTime(t *testing.T) {
+	s := newTestService(t, func(w http.ResponseWriter, r *http.Request) {})
+
+	movie := models.Movie{ExternalID: "123", Title: "Movie A"}
+	database.GetDB().Create(&movie)
+
+	now := time.Now()
+	sessions := []models.Session{
+		{ExternalID: "past", MovieID: movie.ID, MovieTitle: movie.Title, TheaterID: 1446, DateTime: now.Add(-1 * time.Hour), Price: 30},
+		{ExternalID: "later-today", MovieID: movie.ID, MovieTitle: movie.Title, TheaterID: 1446, DateTime: now.Add(2 * time.Hour), Price: 30},
+		{ExternalID: "tomorrow", MovieID: movie.ID, MovieTitle: movie.Title, TheaterID: 1446, DateTime: now.Add(26 * time.Hour), Price: 30},
+		{ExternalID: "other-theater", MovieID: movie.ID, MovieTitle: movie.Title, TheaterID: 9999, DateTime: now.Add(2 * time.Hour), Price: 30},
+	}
+	for i := range sessions {
+		database.GetDB().Create(&sessions[i])
+	}
+
+	active, err := s.GetActiveSessions([]int{1446})
+	if err != nil {
+		t.Fatalf("GetActiveSessions failed: %v", err)
+	}
+
+	if len(active) != 2 {
+		t.Fatalf("expected 2 active sessions (later-today, tomorrow), got %d", len(active))
+	}
+	for _, sess := range active {
+		if sess.ExternalID == "past" || sess.ExternalID == "other-theater" {
+			t.Errorf("did not expect session %q in active results", sess.ExternalID)
+		}
 	}
 }
